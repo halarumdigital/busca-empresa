@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Search, FileSpreadsheet, Building2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Search, FileSpreadsheet, Building2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, CheckSquare, Square } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +85,8 @@ export default function SearchCompanies() {
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
     Object.fromEntries(COLUMNS.map(col => [col.key, col.width]))
   );
+  const [exportedIds, setExportedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
@@ -158,17 +160,71 @@ export default function SearchCompanies() {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
 
-  const exportToExcel = () => {
-    if (results.length === 0) {
-      toast({
-        title: "Nada para exportar",
-        description: "Realize uma busca primeiro.",
-        variant: "destructive",
-      });
-      return;
+  // Registros nao exportados da pagina atual
+  const notExportedResults = results.filter(e => !exportedIds.has(e.id));
+
+  // Toggle selecao de um registro
+  const toggleSelection = (id: number) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  // Selecionar todos nao exportados da pagina atual
+  const selectAllNotExported = () => {
+    const notExportedIds = notExportedResults.map(e => e.id);
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      notExportedIds.forEach(id => newSet.add(id));
+      return newSet;
+    });
+  };
+
+  // Desmarcar todos da pagina atual
+  const deselectAll = () => {
+    const pageIds = results.map(e => e.id);
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      pageIds.forEach(id => newSet.delete(id));
+      return newSet;
+    });
+  };
+
+  // Verifica se todos nao exportados estao selecionados
+  const allNotExportedSelected = notExportedResults.length > 0 &&
+    notExportedResults.every(e => selectedIds.has(e.id));
+
+  const exportToExcel = (onlySelected: boolean = false) => {
+    let dataToExport = results;
+
+    if (onlySelected) {
+      dataToExport = results.filter(e => selectedIds.has(e.id));
+      if (dataToExport.length === 0) {
+        toast({
+          title: "Nenhum registro selecionado",
+          description: "Selecione os registros que deseja exportar.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (results.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Realize uma busca primeiro.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
-    const exportData = results.map(empresa => ({
+    const exportData = dataToExport.map(empresa => ({
       CNPJ: empresa.cnpj || "",
       "Razao Social": empresa.razaoSocial || "",
       "Nome Fantasia": empresa.nomeFantasia || "",
@@ -201,11 +257,26 @@ export default function SearchCompanies() {
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Empresas");
-    XLSX.writeFile(workbook, `empresas_cnae_pagina_${currentPage}.xlsx`);
+    XLSX.writeFile(workbook, `empresas_cnae_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+    // Marcar os IDs exportados
+    const exportedIdsList = dataToExport.map(e => e.id);
+    setExportedIds(prev => {
+      const newSet = new Set(prev);
+      exportedIdsList.forEach(id => newSet.add(id));
+      return newSet;
+    });
+
+    // Limpar selecao dos exportados
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      exportedIdsList.forEach(id => newSet.delete(id));
+      return newSet;
+    });
 
     toast({
       title: "Exportacao concluida",
-      description: `Pagina ${currentPage} exportada com sucesso.`,
+      description: `${dataToExport.length} registros exportados com sucesso.`,
     });
   };
 
@@ -228,7 +299,7 @@ export default function SearchCompanies() {
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
           <CardHeader>
             <CardTitle>Filtrar por Atividade Economica</CardTitle>
-            <CardDescription>Digite o codigo ou descricao do CNAE Principal</CardDescription>
+            <CardDescription>Digite o codigo CNAE ou a descricao da atividade</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
@@ -237,7 +308,7 @@ export default function SearchCompanies() {
                   <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     data-testid="input-cnae-search"
-                    placeholder="Ex: 6821801 ou Imobiliaria..."
+                    placeholder="Ex: 6821801, imobiliaria, restaurante, comercio..."
                     className="pl-9"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -258,28 +329,74 @@ export default function SearchCompanies() {
 
         <div className="space-y-4">
           <div className="flex justify-between items-center flex-wrap gap-4">
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
-              Resultados {totalRecords > 0 && <span className="text-sm font-normal text-slate-500 ml-2">({totalRecords} registros)</span>}
-            </h2>
+            <div>
+              <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
+                Resultados {totalRecords > 0 && <span className="text-sm font-normal text-slate-500 ml-2">({totalRecords} registros)</span>}
+              </h2>
+              {results.length > 0 && (
+                <div className="flex gap-2 mt-1 text-sm text-slate-500">
+                  {exportedIds.size > 0 && (
+                    <span className="text-amber-600">{results.filter(e => exportedIds.has(e.id)).length} ja exportados nesta pagina</span>
+                  )}
+                  {selectedIds.size > 0 && (
+                    <span className="text-blue-600">| {results.filter(e => selectedIds.has(e.id)).length} selecionados</span>
+                  )}
+                </div>
+              )}
+            </div>
             {results.length > 0 && (
-              <Button
-                data-testid="button-export-excel"
-                variant="secondary"
-                onClick={exportToExcel}
-                className="gap-2 text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                Exportar Pagina
-              </Button>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={allNotExportedSelected ? deselectAll : selectAllNotExported}
+                  className="gap-2"
+                  disabled={notExportedResults.length === 0}
+                >
+                  {allNotExportedSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                  {allNotExportedSelected ? "Desmarcar todos" : "Selecionar nao exportados"}
+                </Button>
+                <Button
+                  data-testid="button-export-selected"
+                  variant="secondary"
+                  onClick={() => exportToExcel(true)}
+                  disabled={selectedIds.size === 0}
+                  className="gap-2 text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Exportar Selecionados ({results.filter(e => selectedIds.has(e.id)).length})
+                </Button>
+                <Button
+                  data-testid="button-export-excel"
+                  variant="secondary"
+                  onClick={() => exportToExcel(false)}
+                  className="gap-2 text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Exportar Todos
+                </Button>
+              </div>
             )}
           </div>
 
           <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
              {results.length > 0 ? (
-               <div className="overflow-auto h-[600px]">
+               <div className="overflow-auto h-[calc(100vh-300px)] min-h-[600px]">
                  <table className="w-full border-collapse" style={{ minWidth: Object.values(columnWidths).reduce((a, b) => a + b, 0) }}>
                    <thead className="bg-slate-50 dark:bg-slate-900/50 sticky top-0 z-10">
                      <tr>
+                       <th className="text-center text-xs font-medium text-slate-500 uppercase tracking-wider px-2 py-3 border-b bg-slate-50 dark:bg-slate-900/50 w-12">
+                         <button
+                           onClick={allNotExportedSelected ? deselectAll : selectAllNotExported}
+                           className="p-1 hover:bg-slate-200 rounded"
+                           title={allNotExportedSelected ? "Desmarcar todos" : "Selecionar nao exportados"}
+                         >
+                           {allNotExportedSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                         </button>
+                       </th>
+                       <th className="text-center text-xs font-medium text-slate-500 uppercase tracking-wider px-2 py-3 border-b bg-slate-50 dark:bg-slate-900/50 w-16">
+                         Status
+                       </th>
                        {COLUMNS.map((col) => (
                          <th
                            key={col.key}
@@ -297,41 +414,78 @@ export default function SearchCompanies() {
                      </tr>
                    </thead>
                    <tbody>
-                     {results.map((empresa) => (
-                       <tr key={empresa.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b">
-                         <td className="px-4 py-2 font-mono text-xs" style={{ width: columnWidths.cnpj }}>{empresa.cnpj || "-"}</td>
-                         <td className="px-4 py-2 font-medium text-blue-600 dark:text-blue-400" style={{ width: columnWidths.razaoSocial }}>{empresa.razaoSocial || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.nomeFantasia }}>{empresa.nomeFantasia || "-"}</td>
-                         <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone1 }}>{empresa.telefone1 || "-"}</td>
-                         <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone2 }}>{empresa.telefone2 || "-"}</td>
-                         <td className="px-4 py-2 text-sm text-slate-500" style={{ width: columnWidths.email }}>{empresa.email || "-"}</td>
-                         <td className="px-4 py-2 font-mono text-xs text-slate-500" style={{ width: columnWidths.cnaePrincipal }}>{empresa.cnaePrincipal || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.descricaoCnaePrincipal }} title={empresa.descricaoCnaePrincipal || ""}>{empresa.descricaoCnaePrincipal || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.inicioAtividades }}>{empresa.inicioAtividades || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.porte }}>{empresa.porte || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.mei }}>{empresa.mei || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.simples }}>{empresa.simples || "-"}</td>
-                         <td className="px-4 py-2 text-right font-mono text-xs" style={{ width: columnWidths.capitalSocial }}>{empresa.capitalSocial || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.situacaoCadastral }}>
-                           <Badge variant={empresa.situacaoCadastral === 'Ativa' ? 'default' : 'destructive'} className={empresa.situacaoCadastral === 'Ativa' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
-                             {empresa.situacaoCadastral || "N/A"}
-                           </Badge>
-                         </td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.dataSituacaoCadastral }}>{empresa.dataSituacaoCadastral || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.motivoSituacaoCadastral }}>{empresa.motivoSituacaoCadastral || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.matrizFilial }}>{empresa.matrizFilial || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.naturezaJuridica }} title={empresa.naturezaJuridica || ""}>{empresa.naturezaJuridica || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.endereco }} title={empresa.endereco || ""}>{empresa.endereco || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.complemento }}>{empresa.complemento || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.cep }}>{empresa.cep || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.bairro }}>{empresa.bairro || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.cidade }}>{empresa.cidade || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.estado }}>{empresa.estado || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.nomeSocio }}>{empresa.nomeSocio || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.qualificacaoSocio }}>{empresa.qualificacaoSocio || "-"}</td>
-                         <td className="px-4 py-2" style={{ width: columnWidths.faixaEtaria }}>{empresa.faixaEtaria || "-"}</td>
-                       </tr>
-                     ))}
+                     {results.map((empresa) => {
+                       const isExported = exportedIds.has(empresa.id);
+                       const isSelected = selectedIds.has(empresa.id);
+                       return (
+                         <tr
+                           key={empresa.id}
+                           className={`border-b transition-colors ${
+                             isExported
+                               ? "bg-amber-50 dark:bg-amber-900/20 opacity-60"
+                               : isSelected
+                               ? "bg-blue-50 dark:bg-blue-900/20"
+                               : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                           }`}
+                         >
+                           <td className="px-2 py-2 text-center w-12">
+                             <button
+                               onClick={() => toggleSelection(empresa.id)}
+                               className={`p-1 rounded ${isExported ? "cursor-not-allowed opacity-50" : "hover:bg-slate-200"}`}
+                               disabled={isExported}
+                               title={isExported ? "Ja exportado" : isSelected ? "Desmarcar" : "Selecionar"}
+                             >
+                               {isSelected ? (
+                                 <CheckSquare className="h-4 w-4 text-blue-600" />
+                               ) : (
+                                 <Square className="h-4 w-4 text-slate-400" />
+                               )}
+                             </button>
+                           </td>
+                           <td className="px-2 py-2 text-center w-16">
+                             {isExported ? (
+                               <Badge variant="outline" className="text-amber-600 border-amber-400 text-xs">
+                                 <Check className="h-3 w-3 mr-1" />
+                                 Exp
+                               </Badge>
+                             ) : (
+                               <span className="text-slate-300 text-xs">-</span>
+                             )}
+                           </td>
+                           <td className="px-4 py-2 font-mono text-xs" style={{ width: columnWidths.cnpj }}>{empresa.cnpj || "-"}</td>
+                           <td className="px-4 py-2 font-medium text-blue-600 dark:text-blue-400" style={{ width: columnWidths.razaoSocial }}>{empresa.razaoSocial || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.nomeFantasia }}>{empresa.nomeFantasia || "-"}</td>
+                           <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone1 }}>{empresa.telefone1 || "-"}</td>
+                           <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone2 }}>{empresa.telefone2 || "-"}</td>
+                           <td className="px-4 py-2 text-sm text-slate-500" style={{ width: columnWidths.email }}>{empresa.email || "-"}</td>
+                           <td className="px-4 py-2 font-mono text-xs text-slate-500" style={{ width: columnWidths.cnaePrincipal }}>{empresa.cnaePrincipal || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.descricaoCnaePrincipal }} title={empresa.descricaoCnaePrincipal || ""}>{empresa.descricaoCnaePrincipal || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.inicioAtividades }}>{empresa.inicioAtividades || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.porte }}>{empresa.porte || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.mei }}>{empresa.mei || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.simples }}>{empresa.simples || "-"}</td>
+                           <td className="px-4 py-2 text-right font-mono text-xs" style={{ width: columnWidths.capitalSocial }}>{empresa.capitalSocial || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.situacaoCadastral }}>
+                             <Badge variant={empresa.situacaoCadastral === 'Ativa' ? 'default' : 'destructive'} className={empresa.situacaoCadastral === 'Ativa' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
+                               {empresa.situacaoCadastral || "N/A"}
+                             </Badge>
+                           </td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.dataSituacaoCadastral }}>{empresa.dataSituacaoCadastral || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.motivoSituacaoCadastral }}>{empresa.motivoSituacaoCadastral || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.matrizFilial }}>{empresa.matrizFilial || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.naturezaJuridica }} title={empresa.naturezaJuridica || ""}>{empresa.naturezaJuridica || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.endereco }} title={empresa.endereco || ""}>{empresa.endereco || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.complemento }}>{empresa.complemento || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.cep }}>{empresa.cep || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.bairro }}>{empresa.bairro || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.cidade }}>{empresa.cidade || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.estado }}>{empresa.estado || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.nomeSocio }}>{empresa.nomeSocio || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.qualificacaoSocio }}>{empresa.qualificacaoSocio || "-"}</td>
+                           <td className="px-4 py-2" style={{ width: columnWidths.faixaEtaria }}>{empresa.faixaEtaria || "-"}</td>
+                         </tr>
+                       );
+                     })}
                    </tbody>
                  </table>
                </div>
