@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PGPASSWORD='@4i07,#2R$uU%' psql -h 31.97.87.1 -U leads -d leads -c \"SELECT column_name FROM information_schema.columns WHERE table_name = ''companies'' LIMIT 5;\")",
+      "Bash(node:*)",
+      "Bash(npx tsx -e \"\nimport pg from ''pg'';\nconst { Pool } = pg;\nconst pool = new Pool\\({ connectionString: ''postgresql://leads:@4i07,#2R$uU%@31.97.87.1:5432/leads'' }\\);\n\nasync function check\\(\\) {\n  const client = await pool.connect\\(\\);\n  try {\n    // Listar tabelas\n    const tables = await client.query\\(\"\"SELECT table_name FROM information_schema.tables WHERE table_schema = ''public''\"\"\\);\n    console.log\\(''=== TABELAS ===''\\);\n    tables.rows.forEach\\(r => console.log\\(r.table_name\\)\\);\n    \n  } catch \\(err: any\\) {\n    console.error\\(''Erro:'', err.message\\);\n  } finally {\n    client.release\\(\\);\n    pool.end\\(\\);\n  }\n}\ncheck\\(\\);\n\")",
+      "Bash(npm install:*)"
+    ]
+  }
+}

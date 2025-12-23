@@ -1,18 +1,17 @@
-import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const companies = pgTable("companies", {
+export const empresas = pgTable("empresas", {
   id: serial("id").primaryKey(),
-  cnpj: varchar("cnpj", { length: 18 }).notNull(),
-  razaoSocial: text("razao_social").notNull(),
+  cnpj: varchar("cnpj", { length: 18 }),
+  razaoSocial: text("razao_social"),
   nomeFantasia: text("nome_fantasia"),
-  telefone1: varchar("telefone1", { length: 20 }),
-  telefone2: varchar("telefone2", { length: 20 }),
+  telefone1: varchar("telefone_1", { length: 20 }),
+  telefone2: varchar("telefone_2", { length: 20 }),
   email: varchar("email", { length: 255 }),
-  cnaePrincipal: varchar("cnae_principal", { length: 20 }).notNull(),
-  descCnaePrincipal: text("desc_cnae_principal"),
+  cnaePrincipal: varchar("cnae_principal", { length: 20 }),
+  descricaoCnaePrincipal: text("descricao_cnae_principal"),
   cnaeSecundaria: varchar("cnae_secundaria", { length: 20 }),
   inicioAtividades: varchar("inicio_atividades", { length: 10 }),
   porte: varchar("porte", { length: 50 }),
@@ -20,8 +19,8 @@ export const companies = pgTable("companies", {
   simples: varchar("simples", { length: 3 }),
   capitalSocial: varchar("capital_social", { length: 50 }),
   situacaoCadastral: varchar("situacao_cadastral", { length: 50 }),
-  dataSituacao: varchar("data_situacao", { length: 10 }),
-  motivoSituacao: text("motivo_situacao"),
+  dataSituacaoCadastral: varchar("data_situacao_cadastral", { length: 10 }),
+  motivoSituacaoCadastral: text("motivo_situacao_cadastral"),
   matrizFilial: varchar("matriz_filial", { length: 20 }),
   naturezaJuridica: text("natureza_juridica"),
   endereco: text("endereco"),
@@ -35,9 +34,9 @@ export const companies = pgTable("companies", {
   faixaEtaria: varchar("faixa_etaria", { length: 20 }),
 });
 
-export const insertCompanySchema = createInsertSchema(companies).omit({
+export const insertEmpresaSchema = createInsertSchema(empresas).omit({
   id: true,
 });
 
-export type InsertCompany = z.infer<typeof insertCompanySchema>;
-export type Company = typeof companies.$inferSelect;
+export type InsertEmpresa = z.infer<typeof insertEmpresaSchema>;
+export type Empresa = typeof empresas.$inferSelect;

@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
-import { companies, type Company, type InsertCompany } from "@shared/schema";
+import { empresas, type Empresa, type InsertEmpresa } from "@shared/schema";
 import { ilike, or, sql } from "drizzle-orm";
 
 const { Pool } = pg;
@@ -12,38 +12,52 @@ const pool = new Pool({
 const db = drizzle(pool);
 
 export interface IStorage {
-  searchCompaniesByCnae(searchTerm: string): Promise<Company[]>;
-  createCompany(company: InsertCompany): Promise<Company>;
-  getAllCompanies(): Promise<Company[]>;
+  searchEmpresasByCnae(searchTerm: string, page: number, pageSize: number): Promise<{ data: Empresa[]; total: number }>;
+  createEmpresa(empresa: InsertEmpresa): Promise<Empresa>;
+  getAllEmpresas(): Promise<Empresa[]>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async searchCompaniesByCnae(searchTerm: string): Promise<Company[]> {
+  async searchEmpresasByCnae(searchTerm: string, page: number = 1, pageSize: number = 50): Promise<{ data: Empresa[]; total: number }> {
     if (!searchTerm || searchTerm.trim() === "") {
-      return [];
+      return { data: [], total: 0 };
     }
 
-    const results = await db
+    // Remove formatação do CNAE (hífens, barras, pontos)
+    const cleanedTerm = searchTerm.replace(/[-\/\.]/g, "").trim();
+
+    const whereCondition = or(
+      ilike(empresas.cnaePrincipal, `%${cleanedTerm}%`),
+      ilike(empresas.descricaoCnaePrincipal, `%${searchTerm}%`)
+    );
+
+    // Conta o total de registros
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(empresas)
+      .where(whereCondition);
+
+    const total = Number(countResult[0]?.count || 0);
+
+    // Busca os dados com paginação
+    const offset = (page - 1) * pageSize;
+    const data = await db
       .select()
-      .from(companies)
-      .where(
-        or(
-          ilike(companies.cnaePrincipal, `%${searchTerm}%`),
-          ilike(companies.descCnaePrincipal, `%${searchTerm}%`)
-        )
-      )
-      .limit(100);
+      .from(empresas)
+      .where(whereCondition)
+      .limit(pageSize)
+      .offset(offset);
 
-    return results;
+    return { data, total };
   }
 
-  async createCompany(company: InsertCompany): Promise<Company> {
-    const [newCompany] = await db.insert(companies).values(company).returning();
-    return newCompany;
+  async createEmpresa(empresa: InsertEmpresa): Promise<Empresa> {
+    const [newEmpresa] = await db.insert(empresas).values(empresa).returning();
+    return newEmpresa;
   }
 
-  async getAllCompanies(): Promise<Company[]> {
-    return await db.select().from(companies).limit(100);
+  async getAllEmpresas(): Promise<Empresa[]> {
+    return await db.select().from(empresas).limit(100);
   }
 }
 
