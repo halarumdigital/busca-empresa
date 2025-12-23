@@ -18,7 +18,6 @@ const COLUMNS = [
   { key: "email", label: "Email", width: 250 },
   { key: "cnaePrincipal", label: "CNAE Principal", width: 130 },
   { key: "descricaoCnaePrincipal", label: "Descricao CNAE", width: 350 },
-  { key: "cnaeSecundaria", label: "CNAE Sec.", width: 200 },
   { key: "inicioAtividades", label: "Inicio Atividades", width: 150 },
   { key: "porte", label: "Porte", width: 150 },
   { key: "mei", label: "MEI", width: 80 },
@@ -178,7 +177,6 @@ export default function SearchCompanies() {
       "Email": empresa.email || "",
       "CNAE Principal": empresa.cnaePrincipal || "",
       "Descricao CNAE": empresa.descricaoCnaePrincipal || "",
-      "CNAE Secundaria": empresa.cnaeSecundaria || "",
       "Inicio Atividades": empresa.inicioAtividades || "",
       "Porte": empresa.porte || "",
       "MEI": empresa.mei || "",
@@ -309,7 +307,6 @@ export default function SearchCompanies() {
                          <td className="px-4 py-2 text-sm text-slate-500" style={{ width: columnWidths.email }}>{empresa.email || "-"}</td>
                          <td className="px-4 py-2 font-mono text-xs text-slate-500" style={{ width: columnWidths.cnaePrincipal }}>{empresa.cnaePrincipal || "-"}</td>
                          <td className="px-4 py-2" style={{ width: columnWidths.descricaoCnaePrincipal }} title={empresa.descricaoCnaePrincipal || ""}>{empresa.descricaoCnaePrincipal || "-"}</td>
-                         <td className="px-4 py-2 font-mono text-xs text-slate-500 whitespace-pre-wrap" style={{ width: columnWidths.cnaeSecundaria }}>{empresa.cnaeSecundaria?.replace(/,\s*/g, '\n') || "-"}</td>
                          <td className="px-4 py-2" style={{ width: columnWidths.inicioAtividades }}>{empresa.inicioAtividades || "-"}</td>
                          <td className="px-4 py-2" style={{ width: columnWidths.porte }}>{empresa.porte || "-"}</td>
                          <td className="px-4 py-2" style={{ width: columnWidths.mei }}>{empresa.mei || "-"}</td>
