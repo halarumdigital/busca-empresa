@@ -78,6 +78,20 @@ interface SearchResult {
 
 const PAGE_SIZE = 50;
 
+// Funcao para verificar se telefone eh valido (nao eh apenas "55()" ou similar)
+const isValidPhone = (phone: string | null): boolean => {
+  if (!phone) return false;
+  // Remove tudo que nao for numero
+  const digits = phone.replace(/\D/g, "");
+  // Telefone valido deve ter pelo menos 8 digitos alem do codigo do pais (55)
+  return digits.length >= 10;
+};
+
+const formatPhone = (phone: string | null): string => {
+  if (!isValidPhone(phone)) return "-";
+  return phone || "-";
+};
+
 export default function SearchCompanies() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
@@ -228,8 +242,8 @@ export default function SearchCompanies() {
       CNPJ: empresa.cnpj || "",
       "Razao Social": empresa.razaoSocial || "",
       "Nome Fantasia": empresa.nomeFantasia || "",
-      "Telefone 1": empresa.telefone1 || "",
-      "Telefone 2": empresa.telefone2 || "",
+      "Telefone 1": isValidPhone(empresa.telefone1) ? empresa.telefone1 : "",
+      "Telefone 2": isValidPhone(empresa.telefone2) ? empresa.telefone2 : "",
       "Email": empresa.email || "",
       "CNAE Principal": empresa.cnaePrincipal || "",
       "Descricao CNAE": empresa.descricaoCnaePrincipal || "",
@@ -455,8 +469,8 @@ export default function SearchCompanies() {
                            <td className="px-4 py-2 font-mono text-xs" style={{ width: columnWidths.cnpj }}>{empresa.cnpj || "-"}</td>
                            <td className="px-4 py-2 font-medium text-blue-600 dark:text-blue-400" style={{ width: columnWidths.razaoSocial }}>{empresa.razaoSocial || "-"}</td>
                            <td className="px-4 py-2" style={{ width: columnWidths.nomeFantasia }}>{empresa.nomeFantasia || "-"}</td>
-                           <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone1 }}>{empresa.telefone1 || "-"}</td>
-                           <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone2 }}>{empresa.telefone2 || "-"}</td>
+                           <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone1 }}>{formatPhone(empresa.telefone1)}</td>
+                           <td className="px-4 py-2 text-sm" style={{ width: columnWidths.telefone2 }}>{formatPhone(empresa.telefone2)}</td>
                            <td className="px-4 py-2 text-sm text-slate-500" style={{ width: columnWidths.email }}>{empresa.email || "-"}</td>
                            <td className="px-4 py-2 font-mono text-xs text-slate-500" style={{ width: columnWidths.cnaePrincipal }}>{empresa.cnaePrincipal || "-"}</td>
                            <td className="px-4 py-2" style={{ width: columnWidths.descricaoCnaePrincipal }} title={empresa.descricaoCnaePrincipal || ""}>{empresa.descricaoCnaePrincipal || "-"}</td>
