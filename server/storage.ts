@@ -1,38 +1,50 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+import { companies, type Company, type InsertCompany } from "@shared/schema";
+import { ilike, or, sql } from "drizzle-orm";
 
-// modify the interface with any CRUD methods
-// you might need
+const { Pool } = pg;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const db = drizzle(pool);
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  searchCompaniesByCnae(searchTerm: string): Promise<Company[]>;
+  createCompany(company: InsertCompany): Promise<Company>;
+  getAllCompanies(): Promise<Company[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+export class DatabaseStorage implements IStorage {
+  async searchCompaniesByCnae(searchTerm: string): Promise<Company[]> {
+    if (!searchTerm || searchTerm.trim() === "") {
+      return [];
+    }
 
-  constructor() {
-    this.users = new Map();
+    const results = await db
+      .select()
+      .from(companies)
+      .where(
+        or(
+          ilike(companies.cnaePrincipal, `%${searchTerm}%`),
+          ilike(companies.descCnaePrincipal, `%${searchTerm}%`)
+        )
+      )
+      .limit(100);
+
+    return results;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const [newCompany] = await db.insert(companies).values(company).returning();
+    return newCompany;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async getAllCompanies(): Promise<Company[]> {
+    return await db.select().from(companies).limit(100);
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
