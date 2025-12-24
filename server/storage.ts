@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { empresas, type Empresa, type InsertEmpresa } from "@shared/schema";
-import { ilike, or, sql, and } from "drizzle-orm";
+import { ilike, sql, and } from "drizzle-orm";
 
 const { Pool } = pg;
 
@@ -12,50 +12,58 @@ const pool = new Pool({
 const db = drizzle(pool);
 
 export interface IStorage {
-  searchEmpresasByCnae(searchTerm: string, page: number, pageSize: number): Promise<{ data: Empresa[]; total: number }>;
+  searchEmpresasByCnae(searchTerm: string, page: number, pageSize: number): Promise<{ data: Empresa[]; total: number; hasMore: boolean }>;
   createEmpresa(empresa: InsertEmpresa): Promise<Empresa>;
   getAllEmpresas(): Promise<Empresa[]>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async searchEmpresasByCnae(searchTerm: string, page: number = 1, pageSize: number = 50): Promise<{ data: Empresa[]; total: number }> {
+  async searchEmpresasByCnae(searchTerm: string, page: number = 1, pageSize: number = 50): Promise<{ data: Empresa[]; total: number; hasMore: boolean }> {
     if (!searchTerm || searchTerm.trim() === "") {
-      return { data: [], total: 0 };
+      return { data: [], total: 0, hasMore: false };
     }
 
     // Remove formatação do CNAE (hífens, barras, pontos)
     const cleanedTerm = searchTerm.replace(/[-\/\.]/g, "").trim();
 
-    // Filtro de CNAE (código ou descrição)
-    const cnaeCondition = or(
-      ilike(empresas.cnaePrincipal, `%${cleanedTerm}%`),
-      ilike(empresas.descricaoCnaePrincipal, `%${searchTerm}%`)
-    );
-
-    // Filtro de telefone válido (pelo menos 10 dígitos)
-    const telefoneValidoCondition = sql`LENGTH(REGEXP_REPLACE(${empresas.telefone1}, '[^0-9]', '', 'g')) >= 10`;
-
-    // Combina as condições
-    const whereCondition = and(cnaeCondition, telefoneValidoCondition);
-
-    // Conta o total de registros
-    const countResult = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(empresas)
-      .where(whereCondition);
-
-    const total = Number(countResult[0]?.count || 0);
-
-    // Busca os dados com paginação
     const offset = (page - 1) * pageSize;
+
+    // Query otimizada - busca por código exato é muito mais rápido
+    const isNumericSearch = /^\d+$/.test(cleanedTerm);
+
+    let whereCondition;
+
+    if (isNumericSearch) {
+      // Busca por código CNAE exato (muito mais rápido)
+      whereCondition = and(
+        sql`${empresas.cnaePrincipal} = ${cleanedTerm}`,
+        sql`LENGTH(${empresas.telefone1}) >= 14`
+      );
+    } else {
+      // Busca por descrição (usa ILIKE, mais lento)
+      whereCondition = and(
+        ilike(empresas.descricaoCnaePrincipal, `%${searchTerm}%`),
+        sql`LENGTH(${empresas.telefone1}) >= 14`
+      );
+    }
+
+    // Busca pageSize + 1 para saber se há mais páginas (evita COUNT lento)
     const data = await db
       .select()
       .from(empresas)
       .where(whereCondition)
-      .limit(pageSize)
+      .limit(pageSize + 1)
       .offset(offset);
 
-    return { data, total };
+    const hasMore = data.length > pageSize;
+    if (hasMore) {
+      data.pop(); // Remove o registro extra
+    }
+
+    // Total estimado baseado na página atual
+    const total = hasMore ? (page * pageSize) + 1 : offset + data.length;
+
+    return { data, total, hasMore };
   }
 
   async createEmpresa(empresa: InsertEmpresa): Promise<Empresa> {

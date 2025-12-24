@@ -74,6 +74,7 @@ interface Empresa {
 interface SearchResult {
   data: Empresa[];
   total: number;
+  hasMore: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -135,7 +136,7 @@ export default function SearchCompanies() {
   const { data: result, isLoading } = useQuery<SearchResult>({
     queryKey: ["/api/empresas/search", activeSearch, currentPage],
     queryFn: async () => {
-      if (!activeSearch) return { data: [], total: 0 };
+      if (!activeSearch) return { data: [], total: 0, hasMore: false };
 
       const response = await fetch(
         `/api/empresas/search?cnae=${encodeURIComponent(activeSearch)}&page=${currentPage}&pageSize=${PAGE_SIZE}`
@@ -152,7 +153,7 @@ export default function SearchCompanies() {
 
   const results = result?.data || [];
   const totalRecords = result?.total || 0;
-  const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
+  const hasMore = result?.hasMore || false;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -171,7 +172,7 @@ export default function SearchCompanies() {
   };
 
   const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+    setCurrentPage(Math.max(1, page));
   };
 
   // Registros nao exportados da pagina atual
@@ -345,7 +346,7 @@ export default function SearchCompanies() {
           <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
               <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
-                Resultados {totalRecords > 0 && <span className="text-sm font-normal text-slate-500 ml-2">({totalRecords} registros)</span>}
+                Resultados {results.length > 0 && <span className="text-sm font-normal text-slate-500 ml-2">({results.length}{hasMore ? "+" : ""} nesta pagina)</span>}
               </h2>
               {results.length > 0 && (
                 <div className="flex gap-2 mt-1 text-sm text-slate-500">
@@ -522,17 +523,18 @@ export default function SearchCompanies() {
           </Card>
 
           {/* Paginacao */}
-          {totalRecords > 0 && (
+          {results.length > 0 && (
             <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
               <div className="text-sm text-slate-600 dark:text-slate-400">
-                Mostrando {((currentPage - 1) * PAGE_SIZE) + 1} a {Math.min(currentPage * PAGE_SIZE, totalRecords)} de {totalRecords} registros
+                Mostrando {((currentPage - 1) * PAGE_SIZE) + 1} a {((currentPage - 1) * PAGE_SIZE) + results.length}
+                {hasMore ? "+" : ""} registros
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => goToPage(1)}
-                  disabled={currentPage === 1 || isLoading || totalPages <= 1}
+                  disabled={currentPage === 1 || isLoading}
                 >
                   <ChevronsLeft className="h-4 w-4" />
                 </Button>
@@ -540,7 +542,7 @@ export default function SearchCompanies() {
                   variant="outline"
                   size="sm"
                   onClick={() => goToPage(currentPage - 1)}
-                  disabled={currentPage === 1 || isLoading || totalPages <= 1}
+                  disabled={currentPage === 1 || isLoading}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -548,24 +550,15 @@ export default function SearchCompanies() {
                 <div className="flex items-center gap-1 px-2">
                   <span className="text-sm font-medium">Pagina</span>
                   <span className="text-sm font-bold px-2">{currentPage}</span>
-                  <span className="text-sm text-slate-500">de {totalPages || 1}</span>
                 </div>
 
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => goToPage(currentPage + 1)}
-                  disabled={currentPage >= totalPages || isLoading || totalPages <= 1}
+                  disabled={!hasMore || isLoading}
                 >
                   <ChevronRight className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => goToPage(totalPages)}
-                  disabled={currentPage >= totalPages || isLoading || totalPages <= 1}
-                >
-                  <ChevronsRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
