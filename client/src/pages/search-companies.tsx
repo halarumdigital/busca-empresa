@@ -7,6 +7,41 @@ import { Search, FileSpreadsheet, Building2, ChevronLeft, ChevronRight, Chevrons
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+
+// Lista de estados brasileiros
+const ESTADOS_BR = [
+  { sigla: "", nome: "Todos os estados" },
+  { sigla: "AC", nome: "Acre" },
+  { sigla: "AL", nome: "Alagoas" },
+  { sigla: "AP", nome: "Amapá" },
+  { sigla: "AM", nome: "Amazonas" },
+  { sigla: "BA", nome: "Bahia" },
+  { sigla: "CE", nome: "Ceará" },
+  { sigla: "DF", nome: "Distrito Federal" },
+  { sigla: "ES", nome: "Espírito Santo" },
+  { sigla: "GO", nome: "Goiás" },
+  { sigla: "MA", nome: "Maranhão" },
+  { sigla: "MT", nome: "Mato Grosso" },
+  { sigla: "MS", nome: "Mato Grosso do Sul" },
+  { sigla: "MG", nome: "Minas Gerais" },
+  { sigla: "PA", nome: "Pará" },
+  { sigla: "PB", nome: "Paraíba" },
+  { sigla: "PR", nome: "Paraná" },
+  { sigla: "PE", nome: "Pernambuco" },
+  { sigla: "PI", nome: "Piauí" },
+  { sigla: "RJ", nome: "Rio de Janeiro" },
+  { sigla: "RN", nome: "Rio Grande do Norte" },
+  { sigla: "RS", nome: "Rio Grande do Sul" },
+  { sigla: "RO", nome: "Rondônia" },
+  { sigla: "RR", nome: "Roraima" },
+  { sigla: "SC", nome: "Santa Catarina" },
+  { sigla: "SP", nome: "São Paulo" },
+  { sigla: "SE", nome: "Sergipe" },
+  { sigla: "TO", nome: "Tocantins" },
+];
 
 // Colunas da tabela
 const COLUMNS = [
@@ -96,6 +131,10 @@ const formatPhone = (phone: string | null): string => {
 export default function SearchCompanies() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState("");
+  const [activeEstado, setActiveEstado] = useState("");
+  const [includeSecondary, setIncludeSecondary] = useState(false);
+  const [activeIncludeSecondary, setActiveIncludeSecondary] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(
     Object.fromEntries(COLUMNS.map(col => [col.key, col.width]))
@@ -134,13 +173,19 @@ export default function SearchCompanies() {
   }, [columnWidths]);
 
   const { data: result, isLoading } = useQuery<SearchResult>({
-    queryKey: ["/api/empresas/search", activeSearch, currentPage],
+    queryKey: ["/api/empresas/search", activeSearch, activeEstado, activeIncludeSecondary, currentPage],
     queryFn: async () => {
       if (!activeSearch) return { data: [], total: 0, hasMore: false };
 
-      const response = await fetch(
-        `/api/empresas/search?cnae=${encodeURIComponent(activeSearch)}&page=${currentPage}&pageSize=${PAGE_SIZE}`
-      );
+      let url = `/api/empresas/search?cnae=${encodeURIComponent(activeSearch)}&page=${currentPage}&pageSize=${PAGE_SIZE}`;
+      if (activeEstado) {
+        url += `&estado=${encodeURIComponent(activeEstado)}`;
+      }
+      if (activeIncludeSecondary) {
+        url += `&includeSecondary=true`;
+      }
+
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error("Erro ao buscar empresas");
@@ -151,9 +196,36 @@ export default function SearchCompanies() {
     enabled: !!activeSearch,
   });
 
+  // Busca o total de forma assíncrona (separado)
+  const { data: countResult, isLoading: isCountLoading } = useQuery<{ count: number }>({
+    queryKey: ["/api/empresas/count", activeSearch, activeEstado, activeIncludeSecondary],
+    queryFn: async () => {
+      if (!activeSearch) return { count: 0 };
+
+      let url = `/api/empresas/count?cnae=${encodeURIComponent(activeSearch)}`;
+      if (activeEstado) {
+        url += `&estado=${encodeURIComponent(activeEstado)}`;
+      }
+      if (activeIncludeSecondary) {
+        url += `&includeSecondary=true`;
+      }
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error("Erro ao contar empresas");
+      }
+
+      return response.json();
+    },
+    enabled: !!activeSearch,
+    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+  });
+
   const results = result?.data || [];
-  const totalRecords = result?.total || 0;
+  const totalRecords = countResult?.count || 0;
   const hasMore = result?.hasMore || false;
+  const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,6 +241,8 @@ export default function SearchCompanies() {
 
     setCurrentPage(1);
     setActiveSearch(searchTerm);
+    setActiveEstado(estadoFilter);
+    setActiveIncludeSecondary(includeSecondary);
   };
 
   const goToPage = (page: number) => {
@@ -314,7 +388,7 @@ export default function SearchCompanies() {
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
           <CardHeader>
             <CardTitle>Filtrar por Atividade Economica</CardTitle>
-            <CardDescription>Digite o codigo CNAE ou a descricao da atividade</CardDescription>
+            <CardDescription>Digite o codigo CNAE, multiplos codigos separados por virgula, ou a descricao da atividade</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
@@ -323,12 +397,29 @@ export default function SearchCompanies() {
                   <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     data-testid="input-cnae-search"
-                    placeholder="Ex: 6821801, imobiliaria, restaurante, comercio..."
+                    placeholder="Ex: 6821801 ou 4924800,8512100 ou restaurante..."
                     className="pl-9"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="w-full md:w-48">
+                <Select
+                  value={estadoFilter || "all"}
+                  onValueChange={(value) => setEstadoFilter(value === "all" ? "" : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os estados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ESTADOS_BR.map((estado) => (
+                      <SelectItem key={estado.sigla || "all"} value={estado.sigla || "all"}>
+                        {estado.sigla ? `${estado.sigla} - ${estado.nome}` : estado.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button
                 data-testid="button-search"
@@ -339,6 +430,16 @@ export default function SearchCompanies() {
                 {isLoading ? "Buscando..." : "Buscar"}
               </Button>
             </form>
+            <div className="flex items-center gap-2 mt-3">
+              <Checkbox
+                id="includeSecondary"
+                checked={includeSecondary}
+                onCheckedChange={(checked) => setIncludeSecondary(checked === true)}
+              />
+              <Label htmlFor="includeSecondary" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+                Buscar CNAE secundario (inclui empresas onde o codigo buscado aparece como atividade secundaria)
+              </Label>
+            </div>
           </CardContent>
         </Card>
 
@@ -346,7 +447,7 @@ export default function SearchCompanies() {
           <div className="flex justify-between items-center flex-wrap gap-4">
             <div>
               <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
-                Resultados {results.length > 0 && <span className="text-sm font-normal text-slate-500 ml-2">({results.length}{hasMore ? "+" : ""} nesta pagina)</span>}
+                Resultados {results.length > 0 && <span className="text-sm font-normal text-slate-500 ml-2">({isCountLoading ? 'Calculando...' : totalRecords.toLocaleString('pt-BR')} empresas encontradas)</span>}
               </h2>
               {results.length > 0 && (
                 <div className="flex gap-2 mt-1 text-sm text-slate-500">
@@ -527,7 +628,8 @@ export default function SearchCompanies() {
             <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
               <div className="text-sm text-slate-600 dark:text-slate-400">
                 Mostrando {((currentPage - 1) * PAGE_SIZE) + 1} a {((currentPage - 1) * PAGE_SIZE) + results.length}
-                {hasMore ? "+" : ""} registros
+                {isCountLoading ? ' de ...' : ` de ${totalRecords.toLocaleString('pt-BR')}`} registros
+                {totalPages > 0 && !isCountLoading && ` (${totalPages} páginas)`}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -550,6 +652,10 @@ export default function SearchCompanies() {
                 <div className="flex items-center gap-1 px-2">
                   <span className="text-sm font-medium">Pagina</span>
                   <span className="text-sm font-bold px-2">{currentPage}</span>
+                  {!isCountLoading && totalPages > 0 && (
+                    <span className="text-sm text-slate-500">de {totalPages}</span>
+                  )}
+                  {isCountLoading && <span className="text-sm text-slate-400">de ...</span>}
                 </div>
 
                 <Button
@@ -560,6 +666,16 @@ export default function SearchCompanies() {
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
+                {totalPages > 0 && !isCountLoading && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(totalPages)}
+                    disabled={currentPage >= totalPages || isLoading}
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
           )}

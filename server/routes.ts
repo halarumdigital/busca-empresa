@@ -11,7 +11,7 @@ export async function registerRoutes(
 
   app.get("/api/empresas/search", async (req, res) => {
     try {
-      const { cnae, page = "1", pageSize = "50" } = req.query;
+      const { cnae, page = "1", pageSize = "50", estado, includeSecondary } = req.query;
 
       if (!cnae || typeof cnae !== "string") {
         return res.status(400).json({
@@ -21,13 +21,38 @@ export async function registerRoutes(
 
       const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
       const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10) || 50));
+      const estadoStr = typeof estado === "string" ? estado : undefined;
+      const searchSecondary = includeSecondary === "true";
 
-      const result = await storage.searchEmpresasByCnae(cnae, pageNum, pageSizeNum);
+      const result = await storage.searchEmpresasByCnae(cnae, pageNum, pageSizeNum, estadoStr, searchSecondary);
       return res.json(result);
     } catch (error: any) {
       console.error("Erro ao buscar empresas:", error);
       return res.status(500).json({
         error: "Erro ao buscar empresas"
+      });
+    }
+  });
+
+  // Rota separada para contagem total (pode demorar)
+  app.get("/api/empresas/count", async (req, res) => {
+    try {
+      const { cnae, estado, includeSecondary } = req.query;
+
+      if (!cnae || typeof cnae !== "string") {
+        return res.status(400).json({
+          error: "O parâmetro 'cnae' é obrigatório"
+        });
+      }
+
+      const estadoStr = typeof estado === "string" ? estado : undefined;
+      const searchSecondary = includeSecondary === "true";
+      const count = await storage.countEmpresasByCnae(cnae, estadoStr, searchSecondary);
+      return res.json({ count });
+    } catch (error: any) {
+      console.error("Erro ao contar empresas:", error);
+      return res.status(500).json({
+        error: "Erro ao contar empresas"
       });
     }
   });
