@@ -1,7 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
-import { empresas, type Empresa, type InsertEmpresa } from "@shared/schema";
-import { sql, and, inArray } from "drizzle-orm";
+import { empresas, users, type Empresa, type InsertEmpresa, type User, type InsertUser } from "@shared/schema";
+import { sql, and, inArray, eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 
 const { Pool } = pg;
 
@@ -16,6 +17,15 @@ export interface IStorage {
   countEmpresasByCnae(searchTerm: string, estado?: string, includeSecondary?: boolean): Promise<number>;
   createEmpresa(empresa: InsertEmpresa): Promise<Empresa>;
   getAllEmpresas(): Promise<Empresa[]>;
+  // Métodos de usuário
+  createUser(user: InsertUser): Promise<User>;
+  getUserByEmail(email: string): Promise<User | null>;
+  getUserById(id: number): Promise<User | null>;
+  verifyPassword(email: string, senha: string): Promise<User | null>;
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: number, data: { nome?: string; email?: string; senha?: string }): Promise<User | null>;
+  deleteUser(id: number): Promise<boolean>;
+  createAdminIfNotExists(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -160,6 +170,82 @@ export class DatabaseStorage implements IStorage {
   async getAllEmpresas(): Promise<Empresa[]> {
     return await db.select().from(empresas).limit(100);
   }
+
+  // Métodos de usuário
+  async createUser(user: InsertUser): Promise<User> {
+    const hashedPassword = await bcrypt.hash(user.senha, 10);
+    const [newUser] = await db.insert(users).values({
+      ...user,
+      senha: hashedPassword,
+    }).returning();
+    return newUser;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return user || null;
+  }
+
+  async getUserById(id: number): Promise<User | null> {
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return user || null;
+  }
+
+  async verifyPassword(email: string, senha: string): Promise<User | null> {
+    const user = await this.getUserByEmail(email);
+    if (!user) return null;
+
+    const isValid = await bcrypt.compare(senha, user.senha);
+    if (!isValid) return null;
+
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).orderBy(users.createdAt);
+  }
+
+  async updateUser(id: number, data: { nome?: string; email?: string; senha?: string }): Promise<User | null> {
+    const updateData: Partial<{ nome: string; email: string; senha: string }> = {};
+
+    if (data.nome) updateData.nome = data.nome;
+    if (data.email) updateData.email = data.email;
+    if (data.senha) updateData.senha = await bcrypt.hash(data.senha, 10);
+
+    if (Object.keys(updateData).length === 0) return null;
+
+    const [updated] = await db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, id))
+      .returning();
+
+    return updated || null;
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createAdminIfNotExists(): Promise<void> {
+    const adminEmail = "admin@admin.com";
+    const existingAdmin = await this.getUserByEmail(adminEmail);
+
+    if (!existingAdmin) {
+      const hashedPassword = await bcrypt.hash("admin123", 10);
+      await db.insert(users).values({
+        nome: "Administrador",
+        email: adminEmail,
+        senha: hashedPassword,
+        role: "admin",
+      });
+      console.log("Usuário admin criado: admin@admin.com / admin123");
+    }
+  }
 }
 
 export const storage = new DatabaseStorage();
+
+// Criar admin automaticamente ao iniciar
+storage.createAdminIfNotExists().catch(console.error);

@@ -3,13 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Search, FileSpreadsheet, Building2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, CheckSquare, Square } from "lucide-react";
+import { Search, FileSpreadsheet, Building2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, CheckSquare, Square, LogOut, User, Users, Shield } from "lucide-react";
+import { useLocation } from "wouter";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 // Lista de estados brasileiros
 const ESTADOS_BR = [
@@ -128,7 +130,20 @@ const formatPhone = (phone: string | null): string => {
   return phone || "-";
 };
 
-export default function SearchCompanies() {
+interface UserData {
+  id: number;
+  nome: string;
+  email: string;
+  role: "admin" | "user";
+}
+
+interface SearchCompaniesProps {
+  user: UserData | null;
+  onLogout: () => void;
+}
+
+export default function SearchCompanies({ user, onLogout }: SearchCompaniesProps) {
+  const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState("");
@@ -383,6 +398,37 @@ export default function SearchCompanies() {
               Consulte empresas por CNAE e exporte os dados para analise.
             </p>
           </div>
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  {user.role === "admin" ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                  {user.nome}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <div className="px-2 py-1.5 text-sm text-slate-500">
+                  {user.email}
+                </div>
+                <div className="px-2 py-1.5">
+                  <Badge variant={user.role === "admin" ? "default" : "secondary"} className={user.role === "admin" ? "bg-purple-500" : ""}>
+                    {user.role === "admin" ? "Administrador" : "Usuario"}
+                  </Badge>
+                </div>
+                <DropdownMenuSeparator />
+                {user.role === "admin" && (
+                  <DropdownMenuItem onClick={() => setLocation("/users")} className="cursor-pointer">
+                    <Users className="mr-2 h-4 w-4" />
+                    Gerenciar Usuarios
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={onLogout} className="text-red-600 cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm">

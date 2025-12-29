@@ -1,6 +1,58 @@
-import { pgTable, text, varchar, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// Tabela de usuários
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  senha: text("senha").notNull(),
+  role: varchar("role", { length: 20 }).default("user").notNull(), // admin ou user
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const loginSchema = z.object({
+  email: z.string().email("Email inválido"),
+  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+});
+
+export const registerSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
+  email: z.string().email("Email inválido"),
+  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+  confirmarSenha: z.string().min(6, "Confirmação de senha é obrigatória"),
+}).refine((data) => data.senha === data.confirmarSenha, {
+  message: "As senhas não conferem",
+  path: ["confirmarSenha"],
+});
+
+// Schema para admin criar usuários (inclui role)
+export const adminCreateUserSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
+  email: z.string().email("Email inválido"),
+  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+  role: z.enum(["admin", "user"]).default("user"),
+});
+
+// Schema para atualizar usuário
+export const updateUserSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter no mínimo 3 caracteres").optional(),
+  email: z.string().email("Email inválido").optional(),
+  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres").optional(),
+});
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type User = typeof users.$inferSelect;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
 export const empresas = pgTable("empresas", {
   id: serial("id").primaryKey(),
