@@ -30,6 +30,11 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Trust proxy para funcionar atrás de nginx/reverse proxy
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // Configuração de sessão
 app.use(
   session({
@@ -40,6 +45,7 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 horas
+      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
     },
   })
 );
