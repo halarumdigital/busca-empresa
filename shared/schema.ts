@@ -1,4 +1,4 @@
-import { pgTable, text, varchar, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, timestamp, integer, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -92,3 +92,38 @@ export const insertEmpresaSchema = createInsertSchema(empresas).omit({
 
 export type InsertEmpresa = z.infer<typeof insertEmpresaSchema>;
 export type Empresa = typeof empresas.$inferSelect;
+
+// Tabela de SDRs
+export const sdrs = pgTable("sdrs", {
+  id: serial("id").primaryKey(),
+  nome: varchar("nome", { length: 100 }).notNull(),
+  ddd: varchar("ddd", { length: 5 }).notNull(),
+  ativo: varchar("ativo", { length: 3 }).default("sim").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertSdrSchema = createInsertSchema(sdrs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSdr = z.infer<typeof insertSdrSchema>;
+export type Sdr = typeof sdrs.$inferSelect;
+
+// Tabela de empresas exportadas (controle de duplicidade)
+export const empresasExportadas = pgTable("empresas_exportadas", {
+  id: serial("id").primaryKey(),
+  empresaId: integer("empresa_id").notNull(),
+  sdrId: integer("sdr_id").notNull(),
+  sdrNome: varchar("sdr_nome", { length: 100 }).notNull(),
+  cnae: varchar("cnae", { length: 20 }),
+  dataExportacao: timestamp("data_exportacao").defaultNow().notNull(),
+});
+
+export const insertEmpresaExportadaSchema = createInsertSchema(empresasExportadas).omit({
+  id: true,
+  dataExportacao: true,
+});
+
+export type InsertEmpresaExportada = z.infer<typeof insertEmpresaExportadaSchema>;
+export type EmpresaExportada = typeof empresasExportadas.$inferSelect;

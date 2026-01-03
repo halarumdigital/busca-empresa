@@ -323,5 +323,118 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== ROTAS DE SDR E EXPORTAÇÃO ====================
+
+  // Listar SDRs
+  app.get("/api/sdrs", requireAuth, async (req, res) => {
+    try {
+      const sdrs = await storage.getAllSdrs();
+      return res.json(sdrs);
+    } catch (error: any) {
+      console.error("Erro ao listar SDRs:", error);
+      return res.status(500).json({
+        error: "Erro ao listar SDRs"
+      });
+    }
+  });
+
+  // Estatísticas de exportação
+  app.get("/api/exportacao/stats", requireAuth, async (req, res) => {
+    try {
+      const stats = await storage.getEstatisticasExportacao();
+      return res.json(stats);
+    } catch (error: any) {
+      console.error("Erro ao buscar estatísticas:", error);
+      return res.status(500).json({
+        error: "Erro ao buscar estatísticas"
+      });
+    }
+  });
+
+  // Preview: Ver quantas empresas estão disponíveis por SDR
+  app.get("/api/exportacao/preview", requireAuth, async (req, res) => {
+    try {
+      const { cnaes } = req.query;
+
+      if (!cnaes || typeof cnaes !== "string") {
+        return res.status(400).json({
+          error: "O parâmetro 'cnaes' é obrigatório (ex: 6821801,6821802)"
+        });
+      }
+
+      const cnaeList = cnaes.split(",").map(c => c.trim());
+      const sdrs = await storage.getAllSdrs();
+
+      const preview = await Promise.all(
+        sdrs.map(async (sdr) => {
+          const empresas = await storage.getEmpresasParaExportar(cnaeList, sdr.ddd, 50);
+          return {
+            sdrId: sdr.id,
+            sdrNome: sdr.nome,
+            ddd: sdr.ddd,
+            disponiveis: empresas.length
+          };
+        })
+      );
+
+      return res.json(preview);
+    } catch (error: any) {
+      console.error("Erro ao gerar preview:", error);
+      return res.status(500).json({
+        error: "Erro ao gerar preview"
+      });
+    }
+  });
+
+  // Gerar listas para todos os SDRs
+  app.post("/api/exportacao/gerar", requireAuth, async (req, res) => {
+    try {
+      const { cnaes, limite = 50 } = req.body;
+
+      if (!cnaes || !Array.isArray(cnaes) || cnaes.length === 0) {
+        return res.status(400).json({
+          error: "O parâmetro 'cnaes' é obrigatório (array de códigos CNAE)"
+        });
+      }
+
+      const sdrs = await storage.getAllSdrs();
+      const resultado: {
+        sdr: string;
+        ddd: string;
+        empresas: any[];
+        total: number;
+      }[] = [];
+
+      for (const sdr of sdrs) {
+        const empresas = await storage.getEmpresasParaExportar(cnaes, sdr.ddd, limite);
+
+        if (empresas.length > 0) {
+          // Marca como exportadas
+          const ids = empresas.map(e => e.id);
+          await storage.marcarEmpresasExportadas(ids, sdr.id, sdr.nome, cnaes.join(","));
+        }
+
+        resultado.push({
+          sdr: sdr.nome,
+          ddd: sdr.ddd,
+          empresas,
+          total: empresas.length
+        });
+      }
+
+      return res.json({
+        sucesso: true,
+        dataExportacao: new Date().toISOString(),
+        listas: resultado,
+        totalGeral: resultado.reduce((acc, r) => acc + r.total, 0)
+      });
+    } catch (error: any) {
+      console.error("Erro ao gerar listas:", error);
+      return res.status(500).json({
+        error: "Erro ao gerar listas"
+      });
+    }
+  });
+
   return httpServer;
 }

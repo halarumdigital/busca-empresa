@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Search, FileSpreadsheet, Building2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, CheckSquare, Square, LogOut, User, Users, Shield } from "lucide-react";
+import { Search, FileSpreadsheet, Building2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check, CheckSquare, Square, LogOut, User, Users, Shield, ClipboardList } from "lucide-react";
 import { useLocation } from "wouter";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
@@ -399,35 +399,44 @@ export default function SearchCompanies({ user, onLogout }: SearchCompaniesProps
             </p>
           </div>
           {user && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  {user.role === "admin" ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
-                  {user.nome}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <div className="px-2 py-1.5 text-sm text-slate-500">
-                  {user.email}
-                </div>
-                <div className="px-2 py-1.5">
-                  <Badge variant={user.role === "admin" ? "default" : "secondary"} className={user.role === "admin" ? "bg-purple-500" : ""}>
-                    {user.role === "admin" ? "Administrador" : "Usuario"}
-                  </Badge>
-                </div>
-                <DropdownMenuSeparator />
-                {user.role === "admin" && (
-                  <DropdownMenuItem onClick={() => setLocation("/users")} className="cursor-pointer">
-                    <Users className="mr-2 h-4 w-4" />
-                    Gerenciar Usuarios
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setLocation("/gerar-listas")}
+                className="bg-green-600 hover:bg-green-700 gap-2"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Gerar Listas SDR
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    {user.role === "admin" ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                    {user.nome}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <div className="px-2 py-1.5 text-sm text-slate-500">
+                    {user.email}
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <Badge variant={user.role === "admin" ? "default" : "secondary"} className={user.role === "admin" ? "bg-purple-500" : ""}>
+                      {user.role === "admin" ? "Administrador" : "Usuario"}
+                    </Badge>
+                  </div>
+                  <DropdownMenuSeparator />
+                  {user.role === "admin" && (
+                    <DropdownMenuItem onClick={() => setLocation("/users")} className="cursor-pointer">
+                      <Users className="mr-2 h-4 w-4" />
+                      Gerenciar Usuarios
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={onLogout} className="text-red-600 cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sair
                   </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={onLogout} className="text-red-600 cursor-pointer">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sair
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           )}
         </div>
 

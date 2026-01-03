@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import SearchCompanies from "@/pages/search-companies";
 import LoginPage from "@/pages/login";
 import UsersPage from "@/pages/users";
+import GerarListasPage from "@/pages/gerar-listas";
 import { Loader2 } from "lucide-react";
 
 interface User {
@@ -73,7 +74,7 @@ function Router() {
   }
 
   // Rotas publicas (login) - redireciona para home se ja logado
-  if (!user && (location === "/" || location === "/search" || location === "/users")) {
+  if (!user && (location === "/" || location === "/search" || location === "/users" || location === "/gerar-listas")) {
     return <Redirect to="/login" />;
   }
 
@@ -93,6 +94,9 @@ function Router() {
       </Route>
       <Route path="/users">
         <UsersPage user={user} onLogout={handleLogout} />
+      </Route>
+      <Route path="/gerar-listas">
+        <GerarListasPage user={user} onLogout={handleLogout} />
       </Route>
       <Route path="/">
         <SearchCompanies user={user} onLogout={handleLogout} />

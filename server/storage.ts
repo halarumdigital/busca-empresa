@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
-import { empresas, users, type Empresa, type InsertEmpresa, type User, type InsertUser } from "@shared/schema";
-import { sql, and, inArray, eq } from "drizzle-orm";
+import { empresas, users, sdrs, empresasExportadas, type Empresa, type InsertEmpresa, type User, type InsertUser, type Sdr, type EmpresaExportada } from "@shared/schema";
+import { sql, and, inArray, eq, notInArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 const { Pool } = pg;
@@ -26,6 +26,11 @@ export interface IStorage {
   updateUser(id: number, data: { nome?: string; email?: string; senha?: string }): Promise<User | null>;
   deleteUser(id: number): Promise<boolean>;
   createAdminIfNotExists(): Promise<void>;
+  // Métodos de SDR e exportação
+  getAllSdrs(): Promise<Sdr[]>;
+  getEmpresasParaExportar(cnaes: string[], ddd: string, limite: number): Promise<Empresa[]>;
+  marcarEmpresasExportadas(empresaIds: number[], sdrId: number, sdrNome: string, cnae: string): Promise<void>;
+  getEstatisticasExportacao(): Promise<{ sdrNome: string; total: number; ultimaExportacao: Date | null }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -242,6 +247,72 @@ export class DatabaseStorage implements IStorage {
       });
       console.log("Usuário admin criado: admin@admin.com / admin123");
     }
+  }
+
+  // Métodos de SDR e exportação
+  async getAllSdrs(): Promise<Sdr[]> {
+    return await db.select().from(sdrs).where(eq(sdrs.ativo, "sim"));
+  }
+
+  async getEmpresasParaExportar(cnaes: string[], ddd: string, limite: number): Promise<Empresa[]> {
+    // Busca IDs das empresas já exportadas
+    const exportadas = await db.select({ empresaId: empresasExportadas.empresaId }).from(empresasExportadas);
+    const idsExportados = exportadas.map(e => e.empresaId);
+
+    // Monta condições de busca
+    const conditions = [
+      sql`LENGTH(${empresas.telefone1}) >= 14`,
+      // Telefone começa com o DDD (formato: 55(XX)XXXXXXXX)
+      sql`${empresas.telefone1} LIKE ${`55(${ddd})%`}`,
+    ];
+
+    // Condição de CNAE (principal OU secundário)
+    if (cnaes.length === 1) {
+      conditions.push(sql`(${empresas.cnaePrincipal} = ${cnaes[0]} OR ${empresas.cnaeSecundaria} LIKE ${`%${cnaes[0]}%`})`);
+    } else {
+      const secondaryConditions = cnaes.map(code => `cnae_secundaria LIKE '%${code}%'`).join(" OR ");
+      conditions.push(sql`(${inArray(empresas.cnaePrincipal, cnaes)} OR (${sql.raw(secondaryConditions)}))`);
+    }
+
+    // Exclui empresas já exportadas
+    if (idsExportados.length > 0) {
+      conditions.push(notInArray(empresas.id, idsExportados));
+    }
+
+    const result = await db
+      .select()
+      .from(empresas)
+      .where(and(...conditions))
+      .limit(limite);
+
+    return result;
+  }
+
+  async marcarEmpresasExportadas(empresaIds: number[], sdrId: number, sdrNome: string, cnae: string): Promise<void> {
+    if (empresaIds.length === 0) return;
+
+    const values = empresaIds.map(id => ({
+      empresaId: id,
+      sdrId,
+      sdrNome,
+      cnae,
+    }));
+
+    await db.insert(empresasExportadas).values(values);
+  }
+
+  async getEstatisticasExportacao(): Promise<{ sdrNome: string; total: number; ultimaExportacao: Date | null }[]> {
+    const result = await db.execute(sql`
+      SELECT
+        sdr_nome as "sdrNome",
+        COUNT(*) as total,
+        MAX(data_exportacao) as "ultimaExportacao"
+      FROM empresas_exportadas
+      GROUP BY sdr_nome
+      ORDER BY sdr_nome
+    `);
+
+    return result.rows as { sdrNome: string; total: number; ultimaExportacao: Date | null }[];
   }
 }
 
